@@ -1,20 +1,3 @@
-let g:UltiSnipsExpandTrigger = '<f5>'
-
-" project specific, but oh well. better than exrc!
-au FileType c nnoremap <silent> ;m :Focus make build -j 10<CR>:Dispatch<CR>
-au FileType c nnoremap <silent> ;r :Focus make run -j 10<CR>:Dispatch<CR>
-au FileType c nnoremap <silent> ;cm :Focus make clean; make build -j 10<CR>:Dispatch<CR>
-au FileType c nnoremap <silent> ;cr :Focus make clean; make run -j 10<CR>:Dispatch<CR>
-au FileType c nnoremap <silent> ;d :VimuxRunCommand "lldb ./bin/game"<CR>
-au FileType c nnoremap <silent> ;dm :VimuxRunCommand "make build -j 10 && lldb ./bin/game"<CR>
-au FileType c nnoremap <silent> ;dc :VimuxRunCommand "make clean -j 10 && make build -j 10 && lldb ./bin/game"<CR>
-au FileType c nnoremap <silent> ;tm :VimuxRunCommand "make build -j 10"<CR>
-au FileType c nnoremap <silent> ;tr :VimuxRunCommand "make run -j 10"<CR>
-au FileType c nnoremap <silent> ;tc :VimuxRunCommand "make clean && make run -j 10"<CR>
-
-au FileType zig nnoremap <silent> ;m :make<CR>
-au FileType zig nnoremap <silent> ;r :make run<CR>
-
 " C++ helpers
 
 " switch between hpp and cpp
@@ -37,129 +20,19 @@ au BufEnter,BufNew *.h nnoremap <silent> ;vp :rightbelow vs %<.c<CR>
 au BufEnter,BufNew *.c nnoremap <silent> ;xp :leftabove split %<.h<CR>
 au BufEnter,BufNew *.h nnoremap <silent> ;xp :rightbelow split %<.c<CR>
 
+autocmd BufRead,BufNewFile *.c   SetTab 2
+autocmd BufRead,BufNewFile *.h   SetTab 2
+autocmd BufRead,BufNewFile *.cpp SetTab 2
+autocmd BufRead,BufNewFile *.hpp SetTab 2
+autocmd BufRead,BufNewFile *.txt SetTab 2
+
+
 " open same file in vertical/horizonal splits
 nnoremap <silent> ;vmp :leftabove vsplit %<CR>
 nnoremap <silent> ;xmp :leftabove split %<CR>
 
-" surround with std::optional
-nnoremap <silent> ;cso :execute 's/\(' . expand('<cWORD>') . '\)/std::optional<\1>'<CR>:noh<CR>
-
-" function which copies .hpp/.cpp and auto-rename in buffers
-function! CPPCopy(path, newName, oldTypeName, newTypeName)
-    let l:basePath  = fnamemodify(a:path, ':h')
-    let l:baseName = split(fnamemodify(a:path, ':t'), '\.')[0]
-    let l:oldCppPath = join([l:basePath, "/", l:baseName, ".cpp"], "")
-    let l:oldHppPath = join([l:basePath, "/", l:baseName, ".hpp"], "")
-    let l:newCppPath = join([l:basePath, "/", a:newName, ".cpp"], "")
-    let l:newHppPath = join([l:basePath, "/", a:newName, ".hpp"], "")
-
-    let l:oldCppExists = filereadable(l:oldCppPath)
-
-	if !filereadable(l:oldHppPath)
-		echo "aborted: file " . l:oldHppPath " does not exist"
-		return
-	endif
-
-	if filereadable(l:newHppPath)
-		let l:text = "File " . l:newHppPath . " already exists, continue?"
-		if confirm(l:text, "&y\n&n", 1) != 1
-			echo "aborted"
-			return
-		endif
-	endif
-
-	if l:oldCppExists && filereadable(l:newCppPath)
-		let l:text = "File " . l:newCppPath . " already exists, continue?"
-		if confirm(l:text, "&y\n&n", 1) != 1
-			echo "aborted"
-			return
-		endif
-	endif
-
-	let l:sed0 = join(["s/", tolower(a:oldTypeName), "/", tolower(a:newTypeName), "/g"], "")
-	let l:oldTypeNameCamel = substitute(a:oldTypeName, "<./", "\u&", "")
-	let l:newTypeNameCamel = substitute(a:newTypeName, "<./", "\u&", "")
-	let l:sed1 = join(["s/", l:oldTypeNameCamel, "/", l:newTypeNameCamel, "/g"], "")
-
-	call system(join(["cp ", l:oldHppPath, " ", l:newHppPath], ""))
-	call system(join(["sed -i '' '", l:sed0, "' ", l:newHppPath], ""))
-	call system(join(["sed -i '' '", l:sed1, "' ", l:newHppPath], ""))
-
-    if l:oldCppExists
-	    call system(join(["cp ", l:oldCppPath, " ", l:newCppPath], ""))
-	    call system(join(["sed -i '' '", l:sed0, "' ", l:newCppPath], ""))
-	    call system(join(["sed -i '' '", l:sed1, "' ", l:newCppPath], ""))
-    endif
-
-	let choice = confirm("open " . l:newHppPath . " in:", "&here\n&vsplit\n&hsplit\n&none", 4)
-	if choice == 1
-		exec "e " . l:newHppPath
-	elseif choice == 2
-		exec "vsplit " . l:newHppPath
-	elseif choice == 3
-		exec "split " . l:newHppPath
-	endif
-endfunction
-
-function! CPPCopyComplete(argLead, cmdLine, cursorPos)
-	if count((a:cmdLine)[0:(a:cursorPos)], " ") > 1
-		return []
-	else
-		return getcompletion(a:argLead, 'file')
-	endif
-endfunction
-
-command! -nargs=* -complete=customlist,CPPCopyComplete CPPCopy call CPPCopy(<f-args>)
-
-function! CPPImpl() range
-	" convert lines into marks so things aren't messed up when deleted
-	execute ':' . a:firstline
-	normal 0
-	normal mm
-	execute ':' . a:lastline
-	normal $
-	normal mn
-
-	let myRange = "'m,'n"
-
-	" ask user for class name
-	let className = input("class name: ")
-
-	" remove indentation
-	'm,'nleft
-
-	" remove override
-	execute 'lockmarks ' . myRange . 's/\(\.*\)\s+(override)\s*\(.*\)/\1 \2/ge'
-
-	" remove explicit, virtual
-	execute 'lockmarks ' . myRange . 's/(virtual)\s*\(.*\);/\1 \2;/ge'
-
-	" replace all lines with definitions
-	" \1: return type
-	" \2: return type extras (*/&/etc.)
-	" \3: function name
-	" \4: rest of signature excluding ";"
-	"                     \1        \2                \3     \4
-	execute myRange . 's/\(.*\)\s\+\([^a-zA-Z0-9_]*\)\(.*\)(\(.*\);$/\1 \' . className . '::\3(\4 {\r\r}/g'
-
-	" remove lines with comments
-    execute 'lockmarks ' . myRange . 'g/\/\//d'
-endfunction
-
-command! -range PassRange CPPImpl call CPPImpl(<f-args>)
-
-" cpi -> CPPImpl
-vnoremap <silent> <Leader>cpi :<C-U>CPPImpl<CR>
-
-" zig config
-au FileType zig nmap <Leader>dt <cmd>lua vim.lsp.buf.definition()<CR>
-au FileType zig nmap <Leader>h  <cmd>lua vim.lsp.buf.hover()<CR>
-au FileType zig nmap <Leader>p  <cmd>lua vim.lsp.buf.signature_help()<CR>
-au FileType zig nmap <Leader>gd  <cmd>lua vim.lsp.buf.document_symbol()<CR>
-au FileType zig setlocal omnifunc=v:lua.vim.lsp.omnifunc
-
 " enable history for fzf
-let g:fzf_history_dir = '~/.local/share/fzf-history'
+"let g:fzf_history_dir = '~/.local/share/fzf-history'
 
 " easy-motion
 " disable default mappings, turn on case-insensitivity
@@ -205,10 +78,6 @@ set undofile
 " automatically read on change
 set autoread
 
-" auto-pairs
-let g:AutoPairsFlyMode = 0
-let g:AutoPairsShortcutBackInsert = '<M-b>'
-
 " ;t is trim
 nnoremap ;t <silent> :Trim<CR>
 
@@ -244,9 +113,6 @@ let g:rustfmt_autosave = 1
 set nocompatible
 let c_no_curly_error=1
 
-" Python
-let g:python3_host_prog="/usr/local/bin/python3"
-
 " Get syntax files from config folder
 set runtimepath+=~/.config/nvim/syntax
 
@@ -268,9 +134,6 @@ nmap <esc>a <a-a>
 
 " Disable C-z from job-controlling neovim
 nnoremap <c-z> <nop>
-
-" Ctrl-k closes all floating windows in normal mode
-nmap <c-k> call coc#float#close_all()
 
 " Remap C-c to <esc>
 nmap <c-c> <esc>
@@ -352,8 +215,6 @@ set laststatus=2
 set hlsearch
 set incsearch
 
-set t_Co=256
-
 " Binary files -> xxd
 augroup Binary
   au!
@@ -366,27 +227,14 @@ augroup Binary
   au BufWritePost *.bin set nomod | endif
 augroup END
 
-" colorcolumn 80 when opening C/C++
-autocmd BufRead,BufNewFile *.c setlocal colorcolumn=80
-autocmd BufRead,BufNewFile *.h setlocal colorcolumn=80
-autocmd BufRead,BufNewFile *.cpp setlocal colorcolumn=80
-autocmd BufRead,BufNewFile *.hpp setlocal colorcolumn=80
-autocmd BufRead,BufNewFile *.c SetTab 4
-autocmd BufRead,BufNewFile *.h SetTab 4
-autocmd BufRead,BufNewFile *.cpp SetTab 4
-autocmd BufRead,BufNewFile *.hpp SetTab 4
-
 " C/C++ indent options: fix extra indentation on function continuation
 set cino=(0,W4
-
-" colorcolumn 80, tab width 4 for shaders
-autocmd BufRead,BufNewFile *.sc setlocal colorcolumn=80 | SetTab 4
 
 " nim config
 autocmd BufRead,BufNewFile *.nim  setlocal colorcolumn=80
 autocmd BufRead,BufNewFile *.nims setlocal colorcolumn=80
-autocmd BufRead,BufNewFile *.nim SetTab 4
-autocmd BufRead,BufNewFile *.nims SetTab 4
+autocmd BufRead,BufNewFile *.nim SetTab 2
+autocmd BufRead,BufNewFile *.nims SetTab 2
 
 " ASM == JDH8
 augroup jdh8_ft
@@ -444,8 +292,6 @@ set shortmess+=c
 
 set signcolumn=yes
 
-au FileType text set colorcolumn=80
-
 " show syntax group of symbol under cursor
 function! SynStack()
   if !exists("*synstack")
@@ -464,3 +310,18 @@ nnoremap <silent> <Leader>B <Cmd>lua require'dap'.set_breakpoint(vim.fn.input('B
 nnoremap <silent> <Leader>lp <Cmd>lua require'dap'.set_breakpoint(nil, nil, vim.fn.input('Log point message: '))<CR>
 nnoremap <silent> <Leader>dr <Cmd>lua require'dap'.repl.open()<CR>
 nnoremap <silent> <Leader>dl <Cmd>lua require'dap'.run_last()<CR>
+
+" === nvim-cmp popup (gruvbox dark) ===
+hi Pmenu        guibg=#282828 guifg=#ebdbb2
+hi PmenuSel     guibg=#458588 guifg=#ebdbb2 gui=bold
+hi PmenuSbar    guibg=#3c3836
+hi PmenuThumb   guibg=#7c6f64
+
+hi CmpItemAbbr           guifg=#ebdbb2
+hi CmpItemAbbrMatch     guifg=#fabd2f gui=bold
+hi CmpItemAbbrMatchFuzzy guifg=#fabd2f gui=bold
+
+hi CmpItemKind          guifg=#83a598
+hi CmpItemMenu          guifg=#928374
+
+
